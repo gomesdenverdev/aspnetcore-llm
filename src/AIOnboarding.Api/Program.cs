@@ -1,6 +1,7 @@
 
 using AIOnboarding.Api.Configuration;
 using AIOnboarding.Api.Providers;
+using Microsoft.Extensions.Options;
 
 namespace AIOnboarding.Api;
 
@@ -16,9 +17,11 @@ public class Program
 
         builder.Services.Configure<OllamaOptions>(builder.Configuration.GetSection(OllamaOptions.SectionName));
 
-        builder.Services.AddHttpClient<IChatProvider, OllamaChatProvider>(client =>
+        builder.Services.AddSingleton<IChatProvider>(sp =>
         {
-            client.Timeout = TimeSpan.FromMinutes(2);
+            var options = sp.GetRequiredService<IOptions<OllamaOptions>>();
+            var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
+            return new OllamaChatProvider(httpClient, options);
         });
 
         builder.Services.AddControllers();

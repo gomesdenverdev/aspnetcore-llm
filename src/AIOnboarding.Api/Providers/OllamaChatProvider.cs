@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 
 using AIOnboarding.Api.Configuration;
 using AIOnboarding.Api.Models;
+using AIOnboarding.Api.Models.Dto;
 
 namespace AIOnboarding.Api.Providers;
 
@@ -12,6 +13,8 @@ public sealed class OllamaChatProvider : IChatProvider
 {
     private readonly HttpClient httpClient;
     private readonly OllamaOptions ollamaOptions;
+
+    private List<AskHistory> askHistory = []; 
 
     public OllamaChatProvider(HttpClient httpClient, IOptions<OllamaOptions> ollamaOptions)
     {
@@ -21,13 +24,16 @@ public sealed class OllamaChatProvider : IChatProvider
 
     public async Task<string> AskAsync(string prompt)
     {
-        var systemInstructions = "You are a helpful assistant. If you don't know something say no. No special symbols.";
-        var refinedPrompt = $"System: {systemInstructions}\nUser: {prompt}";
+        if (askHistory.Count == 0)
+        {
+            askHistory.Add(new AskHistory { Role = "system", Content = "You are a helpful assistant. If you do not know something say no. No special symbols." });
+        }
+        askHistory.Add(new AskHistory { Role = "user", Content = prompt });
 
         var request = new OllamaRequest
         {
             Model = ollamaOptions.Model,
-            Prompt = refinedPrompt,
+            Prompt = JsonSerializer.Serialize(askHistory),
             Stream = false
         };
 
@@ -39,6 +45,10 @@ public sealed class OllamaChatProvider : IChatProvider
         var content = await response.Content.ReadAsStringAsync();
         var ollamaResponse = JsonSerializer.Deserialize<OllamaResponse>(content);
 
-        return ollamaResponse?.Response ?? string.Empty;
+        var result = ollamaResponse?.Response ?? string.Empty;
+
+        askHistory.Add(new AskHistory { Role = "assistant", Content = result });
+
+        return result;
     }
 }
