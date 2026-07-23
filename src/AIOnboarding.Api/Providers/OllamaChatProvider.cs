@@ -14,7 +14,7 @@ public sealed class OllamaChatProvider : IChatProvider
     private readonly HttpClient httpClient;
     private readonly OllamaOptions ollamaOptions;
 
-    private List<AskHistory> askHistory = []; 
+    private List<AskHistory> askHistory = [];
 
     public OllamaChatProvider(HttpClient httpClient, IOptions<OllamaOptions> ollamaOptions)
     {
@@ -28,6 +28,7 @@ public sealed class OllamaChatProvider : IChatProvider
         {
             askHistory.Add(new AskHistory { Role = "system", Content = "You are a helpful assistant. If you do not know something say no. No special symbols." });
         }
+
         askHistory.Add(new AskHistory { Role = "user", Content = prompt });
 
         var request = new OllamaRequest
