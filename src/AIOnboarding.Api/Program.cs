@@ -1,5 +1,3 @@
-
-using AIOnboarding.Api.Configuration;
 using AIOnboarding.Api.Providers;
 using Microsoft.Extensions.Options;
 
@@ -15,11 +13,11 @@ public class Program
 
         builder.Services.AddRouting(options => options.LowercaseUrls = true);
 
-        builder.Services.Configure<OllamaOptions>(builder.Configuration.GetSection(OllamaOptions.SectionName));
+        builder.Services.Configure<Configuration.OllamaOptions>(builder.Configuration.GetSection(Configuration.OllamaOptions.SectionName));
 
         builder.Services.AddSingleton<IChatProvider>(sp =>
         {
-            var options = sp.GetRequiredService<IOptions<OllamaOptions>>();
+            var options = sp.GetRequiredService<IOptions<Configuration.OllamaOptions>>();
             var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
             return new OllamaChatProvider(httpClient, options);
         });

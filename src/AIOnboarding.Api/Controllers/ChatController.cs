@@ -5,12 +5,12 @@ using AIOnboarding.Api.Providers;
 
 namespace AIOnboarding.Api.Controllers;
 
-[ApiController, Route("api/[controller]")]
-public sealed class ChatController : ControllerBase
+[ApiController, Route("api/llm")]
+public sealed class ChatApiController : ControllerBase
 {
     private readonly IChatProvider chatProvider;
 
-    public ChatController(IChatProvider chatProvider)
+    public ChatApiController(IChatProvider chatProvider)
     {
         this.chatProvider = chatProvider;
     }
@@ -20,6 +20,14 @@ public sealed class ChatController : ControllerBase
     public async Task<IActionResult> AskAsync([FromBody] ChatRequest request)
     {
         var response = await chatProvider.AskAsync(request.Prompt);
+        return Ok(new ChatResponse(response));
+    }
+
+
+    [HttpPost("chat")]
+    public async Task<IActionResult> ChatAsync([FromBody] ChatRequest request)
+    {
+        var response = await chatProvider.ChatAsync(request.Prompt);
         return Ok(new ChatResponse(response));
     }
 }

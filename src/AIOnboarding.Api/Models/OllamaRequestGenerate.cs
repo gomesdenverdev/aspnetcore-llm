@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace AIOnboarding.Api.Models;
 
-public sealed class OllamaRequest
+public sealed class OllamaRequestGenerate
 {
     [JsonPropertyName("model")]
     public string Model { get; set; } = default!;
