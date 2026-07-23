@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 
@@ -14,7 +15,7 @@ public sealed class OllamaChatProvider : IChatProvider
     private readonly HttpClient httpClient;
     private readonly Configuration.OllamaOptions ollamaOptions;
 
-    private List<AskHistory> askHistory = [];
+    private readonly List<AskHistory> askHistory = [];
 
     public OllamaChatProvider(HttpClient httpClient, IOptions<Configuration.OllamaOptions> ollamaOptions)
     {
@@ -22,7 +23,7 @@ public sealed class OllamaChatProvider : IChatProvider
         this.ollamaOptions = ollamaOptions.Value;
     }
 
-    public async Task<string> AskAsync(string prompt)
+    public async IAsyncEnumerable<string> AskAsync(string prompt, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (askHistory.Count == 0)
         {
@@ -35,25 +36,39 @@ public sealed class OllamaChatProvider : IChatProvider
         {
             Model = ollamaOptions.Model,
             Prompt = JsonSerializer.Serialize(askHistory),
-            Stream = false
+            Stream = true
         };
 
         var json = JsonSerializer.Serialize(request);
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"{ollamaOptions.BaseUrl}/api/generate")
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
 
-        using var response = await httpClient.PostAsync($"{ollamaOptions.BaseUrl}/api/generate", new StringContent(json, Encoding.UTF8, "application/json"));
+        using var response = await httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        var content = await response.Content.ReadAsStringAsync();
-        var ollamaResponse = JsonSerializer.Deserialize<OllamaGenerateResponse>(content);
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
 
-        var result = ollamaResponse?.Response ?? string.Empty;
+        var responseBuilder = new StringBuilder();
+        await foreach (var chunk in ReadStreamAsync(stream, element =>
+        {
+            if (element.TryGetProperty("response", out var responseElement) && responseElement.ValueKind == JsonValueKind.String)
+            {
+                return responseElement.GetString();
+            }
 
-        askHistory.Add(new AskHistory { Role = "assistant", Content = result });
+            return null;
+        }, cancellationToken))
+        {
+            responseBuilder.Append(chunk);
+            yield return chunk;
+        }
 
-        return result;
+        askHistory.Add(new AskHistory { Role = "assistant", Content = responseBuilder.ToString() });
     }
 
-    public async Task<string> ChatAsync(string prompt)
+    public async IAsyncEnumerable<string> ChatAsync(string prompt, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (askHistory.Count == 0)
         {
@@ -67,24 +82,71 @@ public sealed class OllamaChatProvider : IChatProvider
             Model = ollamaOptions.Model,
             Messages = askHistory,
             Options = new Models.OllamaOptions()
-            { 
+            {
                 Temperature = 1.0M
             },
-            Stream = false
+            Stream = true
         };
 
         var json = JsonSerializer.Serialize(request);
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"{ollamaOptions.BaseUrl}/api/chat")
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
 
-        using var response = await httpClient.PostAsync($"{ollamaOptions.BaseUrl}/api/chat", new StringContent(json, Encoding.UTF8, "application/json"));
+        using var response = await httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        var content = await response.Content.ReadAsStringAsync();
-        var ollamaResponse = JsonSerializer.Deserialize<OllamaChatResponse>(content);
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
 
-        var result = ollamaResponse?.Message?.Content ?? string.Empty;
+        var responseBuilder = new StringBuilder();
+        await foreach (var chunk in ReadStreamAsync(stream, element =>
+        {
+            if (element.TryGetProperty("message", out var messageElement) &&
+                messageElement.ValueKind == JsonValueKind.Object &&
+                messageElement.TryGetProperty("content", out var contentElement) &&
+                contentElement.ValueKind == JsonValueKind.String)
+            {
+                return contentElement.GetString();
+            }
 
-        askHistory.Add(new AskHistory { Role = "assistant", Content = result });
+            return null;
+        }, cancellationToken))
+        {
+            responseBuilder.Append(chunk);
+            yield return chunk;
+        }
 
-        return result;
+        askHistory.Add(new AskHistory { Role = "assistant", Content = responseBuilder.ToString() });
+    }
+
+    private async IAsyncEnumerable<string> ReadStreamAsync(Stream stream, Func<JsonElement, string?> extractor, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        using var reader = new StreamReader(stream);
+
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            string? chunk = null;
+
+            try
+            {
+                using var document = JsonDocument.Parse(line);
+                chunk = extractor(document.RootElement);
+            }
+            catch (JsonException)
+            {
+                // Ignore incomplete or non-JSON lines from the stream.
+            }
+
+            if (!string.IsNullOrEmpty(chunk))
+            {
+                yield return chunk;
+            }
+        }
     }
 }

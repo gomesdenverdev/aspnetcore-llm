@@ -15,19 +15,35 @@ public sealed class ChatApiController : ControllerBase
         this.chatProvider = chatProvider;
     }
 
-
     [HttpPost("ask")]
-    public async Task<IActionResult> AskAsync([FromBody] ChatRequest request)
+    public async Task<IActionResult> AskAsync([FromBody] ChatRequest request, CancellationToken cancellationToken)
     {
-        var response = await chatProvider.AskAsync(request.Prompt);
-        return Ok(new ChatResponse(response));
+        Response.Headers.CacheControl = "no-cache";
+        Response.ContentType = "text/plain; charset=utf-8";
+
+        await foreach (var chunk in chatProvider.AskAsync(request.Prompt, cancellationToken))
+        {
+            await Response.WriteAsync(chunk, cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
+        }
+
+        await Response.Body.FlushAsync(cancellationToken);
+        return new EmptyResult();
     }
 
-
     [HttpPost("chat")]
-    public async Task<IActionResult> ChatAsync([FromBody] ChatRequest request)
+    public async Task<IActionResult> ChatAsync([FromBody] ChatRequest request, CancellationToken cancellationToken)
     {
-        var response = await chatProvider.ChatAsync(request.Prompt);
-        return Ok(new ChatResponse(response));
+        Response.Headers.CacheControl = "no-cache";
+        Response.ContentType = "text/plain; charset=utf-8";
+
+        await foreach (var chunk in chatProvider.ChatAsync(request.Prompt, cancellationToken))
+        {
+            await Response.WriteAsync(chunk, cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
+        }
+
+        await Response.Body.FlushAsync(cancellationToken);
+        return new EmptyResult();
     }
 }

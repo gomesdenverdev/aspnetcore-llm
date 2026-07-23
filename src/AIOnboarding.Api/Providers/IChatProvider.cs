@@ -2,6 +2,6 @@ namespace AIOnboarding.Api.Providers;
 
 public interface IChatProvider
 {
-    Task<string> AskAsync(string prompt);
-    Task<string> ChatAsync(string prompt);
+    IAsyncEnumerable<string> AskAsync(string prompt, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<string> ChatAsync(string prompt, CancellationToken cancellationToken = default);
 }
