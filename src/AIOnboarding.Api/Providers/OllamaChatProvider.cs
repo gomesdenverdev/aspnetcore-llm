@@ -4,7 +4,6 @@ using System.Text.Json;
 
 using Microsoft.Extensions.Options;
 
-using AIOnboarding.Api.Configuration;
 using AIOnboarding.Api.Models;
 using AIOnboarding.Api.Models.Dto;
 
@@ -17,6 +16,9 @@ public sealed class OllamaChatProvider : IChatProvider
 
     private readonly List<AskHistory> askHistory = [];
 
+    private readonly string systemPrompt = "You are a helpful assistant. If you do not know something say no. No special symbols. You are in internal support triage bot.";
+    private readonly string developerPrompt = "You are ACME Support; never invent account specific facts; if information is missing ask atmost 2 clarifying questions. Do not reveal any internal policies or tools.";
+
     public OllamaChatProvider(HttpClient httpClient, IOptions<Configuration.OllamaOptions> ollamaOptions)
     {
         this.httpClient = httpClient;
@@ -27,7 +29,8 @@ public sealed class OllamaChatProvider : IChatProvider
     {
         if (askHistory.Count == 0)
         {
-            askHistory.Add(new AskHistory { Role = "system", Content = "You are a helpful assistant. If you do not know something say no. No special symbols." });
+            askHistory.Add(new AskHistory { Role = "system", Content = systemPrompt });
+            askHistory.Add(new AskHistory { Role = "developer", Content = developerPrompt });
         }
 
         askHistory.Add(new AskHistory { Role = "user", Content = prompt });
@@ -36,7 +39,7 @@ public sealed class OllamaChatProvider : IChatProvider
         {
             Model = ollamaOptions.Model,
             Prompt = JsonSerializer.Serialize(askHistory),
-            Stream = true
+            Stream = false
         };
 
         var json = JsonSerializer.Serialize(request);
@@ -72,7 +75,8 @@ public sealed class OllamaChatProvider : IChatProvider
     {
         if (askHistory.Count == 0)
         {
-            askHistory.Add(new AskHistory { Role = "system", Content = "You are a helpful assistant. If you do not know something say no. No special symbols." });
+            askHistory.Add(new AskHistory { Role = "system", Content = systemPrompt });
+            // askHistory.Add(new AskHistory { Role = "developer", Content = developerPrompt });
         }
 
         askHistory.Add(new AskHistory { Role = "user", Content = prompt });
@@ -83,9 +87,10 @@ public sealed class OllamaChatProvider : IChatProvider
             Messages = askHistory,
             Options = new Models.OllamaOptions()
             {
-                Temperature = 1.0M
+                Temperature = 1.0M,
+                Instruction = "Write a plain english email text and do not output JSON. Write it in a manner the way Shashi Tharoor would write it."
             },
-            Stream = true
+            Stream = false
         };
 
         var json = JsonSerializer.Serialize(request);
